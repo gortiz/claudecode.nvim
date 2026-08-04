@@ -205,30 +205,53 @@ Configure the plugin with the detected path:
 
 `openDiff` is for changes Claude wants you to accept or reject. A **review** is for changes — or code, or a plan — you want to _talk about_ first, with both sides annotating the same lines.
 
-Claude opens one with `openReview`, passing a unified diff (`git diff`, `git show`, a range) or a list of files to display in full. The diff is rendered in a normal buffer, and Claude can then:
+> **Why this is not an MCP tool.** It was, briefly. Claude Code surfaces exactly one
+> IDE tool to the model — `mcp__ide__getDiagnostics` — and consumes a handful of the
+> others itself (`openDiff` when applying an edit, `openFile` for at-mentions). Every
+> other tool a plugin advertises is registered, reachable over the wire, and never
+> offered to an agent. So the review is driven from the shell instead, which an agent
+> can actually reach.
 
-- `addReviewComments` — attach inline notes to specific lines, so it explains a change on the lines it means instead of in prose
-- `navigateReview` — move your cursor to the line it is talking about
-- `getReviewComments` — read your replies back, optionally **blocking** until you are done
-- `closeReview` — clean up
+Reviews are opened and driven through `require("claudecode.review")`, either from your
+own Lua or from outside Neovim via `require("claudecode.review.cli").run(path)` — one
+function taking a path to a JSON request and returning a JSON response, so a caller
+sends data rather than Lua and the editor never evaluates anything it composed.
+
+A wrapper around that (the author's lives in a nix-config as `nvim-review`) looks like:
+
+```bash
+nvim-review open --diff-file /tmp/x.diff --title "Last commit"
+nvim-review comment --file src/app.lua --line 12 --body "this allocates per row"
+nvim-review navigate --file src/app.lua --line 12
+nvim-review comments --wait finish     # polls; blocks the caller, never the editor
+nvim-review close
+```
+
+Each call is `nvim --server "$NVIM" --remote-expr` into that one function. Nothing
+blocks Neovim's main loop: a caller that wants to wait polls `get`.
 
 In the review buffer:
 
-| Key       | Action                                           |
-| --------- | ------------------------------------------------ |
-| `c`       | Comment on this line                             |
-| `C`       | Comment on this line in a multi-line editor      |
-| `x`       | Delete your comment on this line                 |
-| `]h` `[h` | Next / previous hunk                             |
-| `]f` `[f` | Next / previous file                             |
-| `]n` `[n` | Next / previous comment                          |
-| `<CR>`    | Open the real file at this line                  |
-| `q`       | Finish the review — this is what unblocks Claude |
-| `?`       | Show these keys                                  |
+| Key       | Action                                                     |
+| --------- | ---------------------------------------------------------- |
+| `c`       | Comment on this line                                       |
+| `C`       | Comment on this line in a multi-line editor                |
+| `x`       | Delete your comment on this line                           |
+| `]h` `[h` | Next / previous hunk                                       |
+| `]f` `[f` | Next / previous file                                       |
+| `]n` `[n` | Next / previous comment                                    |
+| `<CR>`    | Open the real file at this line                            |
+| `q`       | Finish the review — this is what releases a waiting caller |
+| `?`       | Show these keys                                            |
 
-Claude's notes appear in one colour, yours in another. The typical loop is: Claude opens a review, drops a few notes on the parts you would otherwise miss, then calls `getReviewComments` with `wait: "finish"` and waits. You read, reply inline on the lines you disagree with, press `q`, and Claude picks up exactly which line each objection was about.
+Agent notes appear in one colour, yours in another. The typical loop: open a review,
+drop a few notes on the parts the reader would otherwise miss, then poll with
+`--wait finish`. You read, reply inline on the lines you disagree with, press `q`, and
+the caller picks up exactly which line each objection was about — comments survive the
+session teardown, so a poller that arrives after `q` still collects them.
 
-Only one review is open at a time; opening a new one replaces it. If you close the buffer or quit Neovim, a waiting Claude is released rather than left hanging.
+Only one review is open at a time; opening a new one replaces it. Closing the buffer
+or quitting Neovim releases anyone waiting rather than leaving them hanging.
 
 ## Working with Diffs
 

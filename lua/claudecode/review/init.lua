@@ -815,7 +815,7 @@ end
 function M.add_comments(comments)
   local session = M.session
   if not session then
-    return nil, "no active review — call openReview first"
+    return nil, "no active review — open one first (nvim-review open ...)"
   end
 
   ---@return table|nil placed
@@ -898,7 +898,7 @@ end
 function M.navigate(path, line, side)
   local session = M.session
   if not session then
-    return false, "no active review — call openReview first"
+    return false, "no active review — open one first (nvim-review open ...)"
   end
   local index = session.row_index[path]
   if not index then

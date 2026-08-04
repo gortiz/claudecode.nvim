@@ -60,13 +60,6 @@ function M.register_all()
   M.register(require("claudecode.tools.format_document"))
   M.register(require("claudecode.tools.document_symbols"))
 
-  -- Interactive review: a diff both sides can annotate inline
-  M.register(require("claudecode.tools.open_review"))
-  M.register(require("claudecode.tools.add_review_comments"))
-  M.register(require("claudecode.tools.get_review_comments"))
-  M.register(require("claudecode.tools.navigate_review"))
-  M.register(require("claudecode.tools.close_review"))
-
   -- Register internal tools without schemas (not exposed via MCP)
   M.register(require("claudecode.tools.close_tab"))
 end
