@@ -342,6 +342,57 @@ describe("review session", function()
     end)
   end)
 
+  describe("results after the session is gone", function()
+    before_each(function()
+      review.open({ diff = SAMPLE_DIFF })
+      cursor_to_line("+local b = 3")
+      input_response = "one last thing"
+      keymaps["c"]()
+    end)
+
+    it("hands a closed waiter the comments the session held", function()
+      -- close() clears M.session before resolving; reading global state there used
+      -- to report zero comments, which looks exactly like nobody replied.
+      local payload
+      review.wait({ mode = "finish", author = "user" }, function(result)
+        payload = result
+      end)
+
+      review.close("discarded")
+
+      assert.are.equal("closed", payload.status)
+      assert.are.equal(1, #payload.comments)
+      assert.are.equal("one last thing", payload.comments[1].body)
+    end)
+
+    it("still reports comments to a poller after finishing", function()
+      review.finish("user pressed q")
+
+      assert.is_nil(review.session)
+      local comments = review.get_comments({ author = "user" })
+      assert.are.equal(1, #comments)
+      assert.are.equal("one last thing", comments[1].body)
+      assert.are.equal("finished", review.last_result.status)
+    end)
+
+    it("records why a discarded review ended", function()
+      review.close("discarded")
+
+      assert.are.equal("closed", review.last_result.status)
+      assert.are.equal("discarded", review.last_result.reason)
+    end)
+
+    it("clears the previous result when a new review opens", function()
+      review.finish("done")
+      assert.is_not_nil(review.last_result)
+
+      review.open({ diff = SAMPLE_DIFF })
+
+      assert.is_nil(review.last_result)
+      assert.are.equal(0, #review.get_comments())
+    end)
+  end)
+
   describe("user comments", function()
     before_each(function()
       review.open({ diff = SAMPLE_DIFF })

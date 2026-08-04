@@ -38,6 +38,11 @@ local NS_COMMENTS = vim.api.nvim_create_namespace("claudecode_review_comments")
 ---@type ClaudeCodeReviewSession|nil
 M.session = nil
 
+---Outcome of the most recently finished review, kept after the session is torn
+---down so a poller can still collect it. Cleared when a new review opens.
+---@type table|nil
+M.last_result = nil
+
 local session_counter = 0
 
 --- Highlight groups, all linked by default so colorschemes can override them.
@@ -305,6 +310,39 @@ end
 -- Waiters
 ---------------------------------------------------------------------------
 
+---Collect comments from a specific session rather than from module state, so a
+---session that is being torn down can still report what it held.
+---@param session ClaudeCodeReviewSession|nil
+---@param filter {author?: string, since?: number}|nil
+---@return table[]
+local function collect_comments(session, filter)
+  if not session then
+    return {}
+  end
+  filter = filter or {}
+  local author = filter.author
+  if author == "all" then
+    author = nil
+  end
+  local since = tonumber(filter.since) or 0
+
+  local out = {}
+  for _, comment in ipairs(session.comments) do
+    if (not author or comment.author == author) and comment.id > since then
+      out[#out + 1] = {
+        id = comment.id,
+        author = comment.author,
+        path = comment.path,
+        side = comment.side,
+        line = comment.line,
+        body = comment.body,
+        timestamp = comment.timestamp,
+      }
+    end
+  end
+  return out
+end
+
 ---@param session ClaudeCodeReviewSession
 ---@param status string
 local function resolve_waiters(session, status, only_new_comments)
@@ -321,9 +359,12 @@ local function resolve_waiters(session, status, only_new_comments)
           waiter.timer:close()
         end)
       end
+      -- Read from the session being resolved, not from M.session: close() clears
+      -- the global before resolving, and a waiter that reported zero comments
+      -- because of that would be indistinguishable from a review nobody replied to.
       local ok, err = pcall(waiter.callback, {
         status = status,
-        comments = M.get_comments({ author = waiter.author, since = waiter.since }),
+        comments = collect_comments(session, { author = waiter.author, since = waiter.since }),
       })
       if not ok then
         logger.error("review", "Waiter callback failed: " .. tostring(err))
@@ -652,6 +693,7 @@ function M.open(opts)
   end
 
   M.close("replaced by a new review")
+  M.last_result = nil -- a poller must never read the previous review as this one
   setup_highlights()
 
   session_counter = session_counter + 1
@@ -839,32 +881,12 @@ end
 ---@param filter {author?: string, since?: number}|nil
 ---@return table[]
 function M.get_comments(filter)
-  local session = M.session
-  if not session then
-    return {}
+  -- After the session is gone, a poller (the CLI) still needs the outcome, so fall
+  -- back to what the last finished review held.
+  if not M.session and M.last_result then
+    return collect_comments(M.last_result.session, filter)
   end
-  filter = filter or {}
-  local author = filter.author
-  if author == "all" then
-    author = nil
-  end
-  local since = tonumber(filter.since) or 0
-
-  local out = {}
-  for _, comment in ipairs(session.comments) do
-    if (not author or comment.author == author) and comment.id > since then
-      out[#out + 1] = {
-        id = comment.id,
-        author = comment.author,
-        path = comment.path,
-        side = comment.side,
-        line = comment.line,
-        body = comment.body,
-        timestamp = comment.timestamp,
-      }
-    end
-  end
-  return out
+  return collect_comments(M.session, filter)
 end
 
 ---Move the user's view to a coordinate in the review.
@@ -961,6 +983,18 @@ function M.close(reason)
     return
   end
   M.session = nil
+
+  local status = session.finished and "finished" or "closed"
+
+  -- Outlives the session on purpose: a poller (the CLI) asks after the user has
+  -- already pressed q, by which point the session itself is gone.
+  M.last_result = {
+    id = session.id,
+    status = status,
+    reason = reason,
+    finished_at = os.time(),
+    session = session,
+  }
 
   if not session.finished then
     session.finished = true
