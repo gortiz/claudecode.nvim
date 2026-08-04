@@ -17,6 +17,7 @@ describe("ClaudeCodeSend visual selection in tree buffers", function()
     package.loaded["claudecode.visual_commands"] = nil
     package.loaded["claudecode.integrations"] = nil
     package.loaded["claudecode.server.init"] = nil
+    package.loaded["claudecode.server"] = nil
     package.loaded["claudecode.lockfile"] = nil
     package.loaded["claudecode.config"] = nil
     package.loaded["claudecode.logger"] = nil
@@ -110,7 +111,7 @@ describe("ClaudeCodeSend visual selection in tree buffers", function()
         return mock_visual_commands
       elseif module == "claudecode.integrations" then
         return mock_integrations
-      elseif module == "claudecode.server.init" then
+      elseif module == "claudecode.server.init" or module == "claudecode.server" then
         return {
           get_status = function()
             return { running = true, client_count = 1 }

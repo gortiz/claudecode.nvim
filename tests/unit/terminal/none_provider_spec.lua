@@ -38,6 +38,7 @@ describe("none terminal provider", function()
       setup = function() end,
     }
     package.loaded["claudecode.server.init"] = { state = { port = 12345 } }
+    package.loaded["claudecode.server"] = { state = { port = 12345 } }
 
     -- Ensure fresh terminal module load
     package.loaded["claudecode.terminal"] = nil

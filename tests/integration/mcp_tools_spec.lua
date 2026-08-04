@@ -4,7 +4,9 @@ require("tests.busted_setup")
 describe("MCP Tools Integration", function()
   -- Clear module cache at the start of the describe block
   package.loaded["claudecode.server.init"] = nil
+  package.loaded["claudecode.server"] = nil
   package.loaded["claudecode.tools.init"] = nil
+  package.loaded["claudecode.tools"] = nil
   package.loaded["claudecode.diff"] = nil
 
   -- Mock the selection module before other modules might require it
@@ -25,8 +27,8 @@ describe("MCP Tools Integration", function()
   assert(_G.vim.api, "Global vim.api mock not initialized")
 
   -- Load modules (these will now use the _G.vim provided by busted_setup and fresh caches)
-  local server = require("claudecode.server.init")
-  local tools = require("claudecode.tools.init")
+  local server = require("claudecode.server")
+  local tools = require("claudecode.tools")
 
   local original_vim_functions = {} -- To store original functions if we override them
 

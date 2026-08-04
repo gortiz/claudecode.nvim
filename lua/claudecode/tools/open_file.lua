@@ -47,56 +47,7 @@ local schema = {
   },
 }
 
----Finds a suitable main editor window to open files in.
----Excludes terminals, sidebars, and floating windows.
----@return integer? win_id Window ID of the main editor window, or nil if not found
-local function find_main_editor_window()
-  local windows = vim.api.nvim_list_wins()
-
-  for _, win in ipairs(windows) do
-    local buf = vim.api.nvim_win_get_buf(win)
-    local buftype = vim.api.nvim_buf_get_option(buf, "buftype")
-    local filetype = vim.api.nvim_buf_get_option(buf, "filetype")
-    local win_config = vim.api.nvim_win_get_config(win)
-
-    -- Check if this is a suitable window
-    local is_suitable = true
-
-    -- Skip floating windows
-    if win_config.relative and win_config.relative ~= "" then
-      is_suitable = false
-    end
-
-    -- Skip special buffer types
-    if is_suitable and (buftype == "terminal" or buftype == "nofile" or buftype == "prompt") then
-      is_suitable = false
-    end
-
-    -- Skip known sidebar filetypes
-    if
-      is_suitable
-      and (
-        filetype == "neo-tree"
-        or filetype == "neo-tree-popup"
-        or filetype == "NvimTree"
-        or filetype == "oil"
-        or filetype == "minifiles"
-        or filetype == "netrw"
-        or filetype == "aerial"
-        or filetype == "tagbar"
-      )
-    then
-      is_suitable = false
-    end
-
-    -- This looks like a main editor window
-    if is_suitable then
-      return win
-    end
-  end
-
-  return nil
-end
+local find_main_editor_window = require("claudecode.utils").find_main_editor_window
 
 --- Handles the openFile tool invocation.
 --- Opens a file in the editor with optional selection.

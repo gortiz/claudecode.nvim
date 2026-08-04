@@ -214,17 +214,17 @@ Claude opens one with `openReview`, passing a unified diff (`git diff`, `git sho
 
 In the review buffer:
 
-| Key       | Action                                        |
-| --------- | --------------------------------------------- |
-| `c`       | Comment on this line                          |
-| `C`       | Comment on this line in a multi-line editor    |
-| `x`       | Delete your comment on this line               |
-| `]h` `[h` | Next / previous hunk                           |
-| `]f` `[f` | Next / previous file                           |
-| `]n` `[n` | Next / previous comment                        |
-| `<CR>`    | Open the real file at this line                |
+| Key       | Action                                           |
+| --------- | ------------------------------------------------ |
+| `c`       | Comment on this line                             |
+| `C`       | Comment on this line in a multi-line editor      |
+| `x`       | Delete your comment on this line                 |
+| `]h` `[h` | Next / previous hunk                             |
+| `]f` `[f` | Next / previous file                             |
+| `]n` `[n` | Next / previous comment                          |
+| `<CR>`    | Open the real file at this line                  |
 | `q`       | Finish the review — this is what unblocks Claude |
-| `?`       | Show these keys                                |
+| `?`       | Show these keys                                  |
 
 Claude's notes appear in one colour, yours in another. The typical loop is: Claude opens a review, drops a few notes on the parts you would otherwise miss, then calls `getReviewComments` with `wait: "finish"` and waits. You read, reply inline on the lines you disagree with, press `q`, and Claude picks up exactly which line each objection was about.
 

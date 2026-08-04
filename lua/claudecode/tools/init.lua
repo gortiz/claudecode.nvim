@@ -52,6 +52,14 @@ function M.register_all()
   M.register(require("claudecode.tools.check_document_dirty"))
   M.register(require("claudecode.tools.save_document"))
 
+  -- Extended tools
+  M.register(require("claudecode.tools.show_buffer"))
+  M.register(require("claudecode.tools.get_symbol_info"))
+  M.register(require("claudecode.tools.find_references"))
+  M.register(require("claudecode.tools.rename_symbol"))
+  M.register(require("claudecode.tools.format_document"))
+  M.register(require("claudecode.tools.document_symbols"))
+
   -- Interactive review: a diff both sides can annotate inline
   M.register(require("claudecode.tools.open_review"))
   M.register(require("claudecode.tools.add_review_comments"))

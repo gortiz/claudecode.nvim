@@ -4,7 +4,7 @@
 
 local M = {}
 
-local claudecode_server_module = require("claudecode.server.init")
+local claudecode_server_module = require("claudecode.server")
 
 ---@type ClaudeCodeTerminalConfig
 local defaults = {
@@ -23,6 +23,8 @@ local defaults = {
   cwd = nil, -- static cwd override
   git_repo_cwd = false, -- resolve to git root when spawning
   cwd_provider = nil, -- function(ctx) -> cwd string
+  -- Debug: write claude --debug-file output to this path (nil = disabled)
+  debug_file = nil,
 }
 
 M.defaults = defaults
@@ -306,6 +308,10 @@ local function get_claude_command_and_env(cmd_args)
     cmd_string = base_cmd
   end
 
+  if defaults.debug_file and defaults.debug_file ~= "" then
+    cmd_string = cmd_string .. " --debug-file " .. vim.fn.expand(defaults.debug_file)
+  end
+
   local sse_port_value = claudecode_server_module.state.port
   local env_table = {
     ENABLE_IDE_INTEGRATION = "true",
@@ -481,6 +487,12 @@ function M.setup(user_term_config, p_terminal_cmd, p_env)
         end
       else
         vim.notify("claudecode.terminal.setup: Invalid cwd_provider type: " .. tostring(t), vim.log.levels.WARN)
+      end
+    elseif k == "debug_file" then
+      if v == nil or type(v) == "string" then
+        defaults.debug_file = v
+      else
+        vim.notify("claudecode.terminal.setup: Invalid value for debug_file: " .. tostring(v), vim.log.levels.WARN)
       end
     else
       if k ~= "terminal_cmd" then

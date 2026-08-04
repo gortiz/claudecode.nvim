@@ -226,6 +226,7 @@ describe("claudecode.terminal (wrapper for Snacks.nvim)", function()
     package.loaded["claudecode.terminal.snacks"] = nil
     package.loaded["claudecode.terminal.native"] = nil
     package.loaded["claudecode.server.init"] = nil
+    package.loaded["claudecode.server"] = nil
     package.loaded["snacks"] = nil
     package.loaded["claudecode.config"] = nil
     package.loaded["claudecode.logger"] = nil
@@ -246,6 +247,7 @@ describe("claudecode.terminal (wrapper for Snacks.nvim)", function()
       state = { port = 12345 },
     }
     package.loaded["claudecode.server.init"] = mock_server_module
+    package.loaded["claudecode.server"] = mock_server_module
 
     mock_claudecode_config_module = {
       apply = spy.new(function(user_conf)
@@ -370,6 +372,7 @@ describe("claudecode.terminal (wrapper for Snacks.nvim)", function()
     package.loaded["claudecode.terminal.snacks"] = nil
     package.loaded["claudecode.terminal.native"] = nil
     package.loaded["claudecode.server.init"] = nil
+    package.loaded["claudecode.server"] = nil
     package.loaded["snacks"] = nil
     package.loaded["claudecode.config"] = nil
     package.loaded["claudecode.logger"] = nil

@@ -205,7 +205,7 @@ describe("claudecode.init", function()
     mock_lockfile.remove = SpyObject.new(mock_lockfile.remove)
 
     _G.require = function(mod)
-      if mod == "claudecode.server.init" then
+      if mod == "claudecode.server.init" or mod == "claudecode.server" then
         return mock_server
       elseif mod == "claudecode.lockfile" then
         return mock_lockfile
@@ -307,7 +307,7 @@ describe("claudecode.init", function()
       _G.require = function(mod)
         if mod == "claudecode.terminal" then
           return mock_terminal
-        elseif mod == "claudecode.server.init" then
+        elseif mod == "claudecode.server.init" or mod == "claudecode.server" then
           return mock_server
         elseif mod == "claudecode.lockfile" then
           return mock_lockfile
@@ -494,7 +494,7 @@ describe("claudecode.init", function()
       _G.require = function(mod)
         if mod == "claudecode.terminal" then
           return mock_terminal
-        elseif mod == "claudecode.server.init" then
+        elseif mod == "claudecode.server.init" or mod == "claudecode.server" then
           return mock_server
         elseif mod == "claudecode.lockfile" then
           return mock_lockfile

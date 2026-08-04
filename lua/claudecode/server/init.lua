@@ -2,7 +2,7 @@
 local claudecode_main = require("claudecode") -- Added for version access
 local logger = require("claudecode.logger")
 local tcp_server = require("claudecode.server.tcp")
-local tools = require("claudecode.tools.init") -- Added: Require the tools module
+local tools = require("claudecode.tools")
 
 local MCP_PROTOCOL_VERSION = "2024-11-05"
 
@@ -263,7 +263,6 @@ function M.register_handlers()
         capabilities = {
           logging = vim.empty_dict(), -- Ensure this is an object {} not an array []
           prompts = { listChanged = true },
-          resources = { subscribe = true, listChanged = true },
           tools = { listChanged = true },
         },
         serverInfo = {

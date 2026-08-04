@@ -8,6 +8,7 @@ describe("Tools Module", function()
 
   local function setup()
     package.loaded["claudecode.tools.init"] = nil
+    package.loaded["claudecode.tools"] = nil
     package.loaded["claudecode.diff"] = nil
     package.loaded["luassert.spy"] = nil -- Ensure spy is fresh
 
@@ -112,7 +113,7 @@ describe("Tools Module", function()
 
     _G.vim = mock_vim
 
-    tools = require("claudecode.tools.init")
+    tools = require("claudecode.tools")
     -- Ensure tools are registered for testing handle_invoke
     tools.register_all()
   end

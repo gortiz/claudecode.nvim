@@ -191,6 +191,21 @@ local vim = {
       end
     end,
 
+    -- The read side of the modern option API. Production code has moved off the
+    -- deprecated nvim_buf_get_option, so without this any code path that reads an
+    -- option (find_main_editor_window, for one) blows up under test only.
+    nvim_get_option_value = function(name, opts)
+      if opts and opts.buf then
+        local buffer = vim._buffers[opts.buf]
+        return buffer and buffer.options and buffer.options[name] or nil
+      end
+      if opts and opts.win then
+        local window = vim._windows and vim._windows[opts.win]
+        return window and window.options and window.options[name] or nil
+      end
+      return vim._options[name]
+    end,
+
     -- Add missing API functions for diff tests
     nvim_create_buf = function(listed, scratch)
       local bufnr = #vim._buffers + 1

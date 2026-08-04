@@ -45,7 +45,7 @@ function M.is_claude_connected()
     return false
   end
 
-  local server_module = require("claudecode.server.init")
+  local server_module = require("claudecode.server")
   local status = server_module.get_status()
   if not status.running then
     return false
@@ -402,7 +402,7 @@ function M.start(show_startup_notification)
     return false, "Already running"
   end
 
-  local server = require("claudecode.server.init")
+  local server = require("claudecode.server")
   local lockfile = require("claudecode.lockfile")
 
   -- Generate auth token first so we can pass it to the server

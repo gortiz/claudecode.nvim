@@ -9,9 +9,10 @@ describe("WebSocket Server", function()
   local function setup()
     -- Reset loaded modules
     package.loaded["claudecode.server.init"] = nil -- Also update package.loaded key
+    package.loaded["claudecode.server"] = nil -- Also update package.loaded key
 
     -- Load the module under test
-    server = require("claudecode.server.init")
+    server = require("claudecode.server")
   end
 
   -- Clean up after each test

@@ -6,7 +6,7 @@
 ---@brief ]]
 
 local M = {}
-local tools = require("claudecode.tools.init")
+local tools = require("claudecode.tools")
 
 --- Mock server state
 M.state = {

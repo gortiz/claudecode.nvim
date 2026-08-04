@@ -15,6 +15,7 @@ describe("ClaudeCodeSend Command Range Functionality", function()
     package.loaded["claudecode.selection"] = nil
     package.loaded["claudecode.terminal"] = nil
     package.loaded["claudecode.server.init"] = nil
+    package.loaded["claudecode.server"] = nil
     package.loaded["claudecode.lockfile"] = nil
     package.loaded["claudecode.config"] = nil
     package.loaded["claudecode.logger"] = nil
@@ -123,7 +124,7 @@ describe("ClaudeCodeSend Command Range Functionality", function()
         return mock_selection_module
       elseif module_name == "claudecode.terminal" then
         return mock_terminal
-      elseif module_name == "claudecode.server.init" then
+      elseif module_name == "claudecode.server.init" or module_name == "claudecode.server" then
         return mock_server
       elseif module_name == "claudecode.lockfile" then
         return mock_lockfile

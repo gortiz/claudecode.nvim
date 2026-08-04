@@ -74,7 +74,7 @@ describe("ClaudeCodeAdd command", function()
         return {
           setup = function() end,
         }
-      elseif mod == "claudecode.server.init" then
+      elseif mod == "claudecode.server.init" or mod == "claudecode.server" then
         return {
           get_status = function()
             return { running = true, client_count = 1 }

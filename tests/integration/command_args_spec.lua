@@ -136,7 +136,7 @@ describe("ClaudeCode command arguments integration", function()
 
     original_require = _G.require
     _G.require = function(mod)
-      if mod == "claudecode.server.init" then
+      if mod == "claudecode.server.init" or mod == "claudecode.server" then
         return mock_server
       elseif mod == "claudecode.lockfile" then
         return mock_lockfile

@@ -61,7 +61,7 @@ describe("focus_after_send behavior", function()
         return { setup = function() end }
       elseif mod == "claudecode.terminal" then
         return mock_terminal
-      elseif mod == "claudecode.server.init" then
+      elseif mod == "claudecode.server.init" or mod == "claudecode.server" then
         return {
           get_status = function()
             return { running = true, client_count = 1 }
@@ -81,6 +81,7 @@ describe("focus_after_send behavior", function()
     package.loaded["claudecode.diff"] = nil
     package.loaded["claudecode.terminal"] = nil
     package.loaded["claudecode.server.init"] = nil
+    package.loaded["claudecode.server"] = nil
   end
 
   after_each(function()
