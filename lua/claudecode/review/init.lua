@@ -332,6 +332,7 @@ local function collect_comments(session, filter)
       out[#out + 1] = {
         id = comment.id,
         author = comment.author,
+        sent = comment.sent or false,
         path = comment.path,
         side = comment.side,
         line = comment.line,
@@ -415,7 +416,7 @@ local function sync_modified(session)
   end
   local unsent = false
   for _, comment in ipairs(session.comments) do
-    if comment.author == "user" then
+    if comment.author == "user" and not comment.sent then
       unsent = true
       break
     end
@@ -604,9 +605,9 @@ Claude review — keys
   ]n / [n  next / previous comment
   <CR>     open the real file at this line
 
-  :w       finish the review and send your replies
+  :w       send your replies — the review stays open, so you can keep talking
   :q       close — refused while replies are unsent, like any modified buffer
-  :q!      discard the review and your replies
+  :q!      close, discarding replies you never sent
   q        same as :q
   ?        this help
 ]]
@@ -782,18 +783,19 @@ function M.open(opts)
   pcall(
     vim.api.nvim_set_option_value,
     "winbar",
-    session.title .. "  —  c comment · :w send · :q! discard · ? keys",
+    session.title .. "  —  c comment · :w send · :q close · ? keys",
     { win = session.win }
   )
 
   apply_static_marks(session)
   setup_keymaps(session)
 
-  -- :w means "I am done, send these" — the same reflex as accepting a diff.
+  -- :w sends what you have written and leaves the review on screen, exactly as
+  -- writing any other buffer does not close it. :q closes; :q! discards.
   vim.api.nvim_create_autocmd("BufWriteCmd", {
     buffer = bufnr,
     callback = function()
-      M.finish("user wrote the review buffer")
+      M.send("user wrote the review buffer")
     end,
   })
 
@@ -1026,16 +1028,55 @@ function M.wait(opts, callback)
   return true
 end
 
----The user is done: unblock anyone waiting and leave the buffer on screen.
+---Send the replies written so far and leave the review open.
+---
+---This is what :w does. A review is a conversation: the agent reads what you wrote,
+---answers, and may add more notes to the same diff — so writing must not tear down
+---the pane, your scroll position and the thread along with it. Closing is :q.
+---@param reason string|nil
+---@return boolean sent False when there is no review to send from
+function M.send(reason)
+  local session = M.session
+  if not session or session.finished then
+    return false
+  end
+
+  local unsent = 0
+  for _, comment in ipairs(session.comments) do
+    if comment.author == "user" and not comment.sent then
+      comment.sent = true
+      unsent = unsent + 1
+    end
+  end
+
+  sync_modified(session)
+  logger.debug("review", "Sent " .. unsent .. " reply(ies) from " .. session.id .. ": " .. tostring(reason))
+  resolve_waiters(session, "sent", false)
+
+  vim.notify(
+    unsent == 0 and "No new replies to send — the review stays open"
+      or string.format("Sent %d repl%s — the review stays open", unsent, unsent == 1 and "y" or "ies"),
+    vim.log.levels.INFO
+  )
+  return true
+end
+
+---The user is done with the review entirely: send anything outstanding, then close.
 ---@param reason string|nil
 function M.finish(reason)
   local session = M.session
   if not session or session.finished then
     return
   end
+  -- Mark anything outstanding as sent before the session goes away, so a poller that
+  -- arrives afterwards sees replies rather than a review that closed on them.
+  for _, comment in ipairs(session.comments) do
+    if comment.author == "user" then
+      comment.sent = true
+    end
+  end
   session.finished = true
-  -- The replies are on their way out, so the buffer is no longer dirty. Clearing this
-  -- before teardown also stops :wq tripping over its own protection.
+  -- No longer dirty, which also stops :wq tripping over its own protection.
   if not session.wiping and session.bufnr and vim.api.nvim_buf_is_valid(session.bufnr) then
     pcall(vim.api.nvim_set_option_value, "modified", false, { buf = session.bufnr })
   end

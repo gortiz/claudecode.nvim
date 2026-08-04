@@ -245,9 +245,14 @@ In the review buffer:
 
 | Command | Action                                                                        |
 | ------- | ----------------------------------------------------------------------------- |
-| `:w`    | Finish the review and send your replies — this releases a waiting caller      |
+| `:w`    | Send your replies. **The review stays open** — writing never closes anything  |
 | `:q`    | Close. **Refused while replies are unsent**, exactly like any modified buffer |
-| `:q!`   | Discard the review and your replies                                           |
+| `:q!`   | Close, discarding replies you never sent                                      |
+
+`:w` releases a caller waiting on `--wait finish` and leaves the pane exactly as it
+was, so a review is a conversation rather than a one-shot: the agent reads what you
+wrote, answers, adds more notes to the same diff, and waits again. Your scroll
+position, its earlier notes and the thread all survive. Only `:q` ends it.
 
 The protection is Neovim's own `E37` rather than an imitation of it: the buffer is
 `buftype=acwrite` with `bufhidden=wipe`, unsent replies set `'modified'`, and sending

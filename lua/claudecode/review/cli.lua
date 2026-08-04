@@ -65,21 +65,37 @@ local function dispatch(request)
   if action == "get" then
     local comments = review.get_comments({ author = request.author, since = request.since })
     local summary = review.summary()
-    -- `finished` is what a poller loops on, and it has to stay true after the
-    -- session itself is gone — otherwise a caller that polls just after the user
-    -- pressed q would wait forever for a review that no longer exists.
-    local finished = summary == nil or summary.finished == true
-    local status = "open"
-    if summary == nil then
-      status = review.last_result and review.last_result.status or "none"
-    elseif summary.finished then
-      status = "finished"
+
+    -- Two different questions, and a poller needs both:
+    --   closed  — the review is gone, so nothing more will ever arrive
+    --   sent    — the user wrote (:w), so there are replies to read *now*, while
+    --             the review stays open and the conversation continues
+    local closed = summary == nil or summary.finished == true
+    local sent = false
+    for _, comment in ipairs(comments) do
+      if comment.author == "user" and comment.sent then
+        sent = true
+        break
+      end
     end
+
+    local status
+    if closed then
+      status = review.last_result and review.last_result.status or "closed"
+    elseif sent then
+      status = "sent"
+    else
+      status = "open"
+    end
+
     return {
       ok = true,
       data = {
         status = status,
-        finished = finished,
+        closed = closed,
+        sent = sent,
+        -- Kept so a caller written against the old shape still stops polling.
+        finished = closed,
         comments = comments,
         review = summary,
       },
@@ -93,6 +109,14 @@ local function dispatch(request)
     local id = review.session.id
     review.close(request.reason or "closed from the shell")
     return { ok = true, data = { closed = true, id = id } }
+  end
+
+  if action == "send" then
+    if not review.session then
+      return { ok = false, error = "no active review to send from" }
+    end
+    review.send(request.reason or "sent from the shell")
+    return { ok = true, data = { sent = true } }
   end
 
   if action == "finish" then

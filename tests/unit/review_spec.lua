@@ -342,6 +342,61 @@ describe("review session", function()
     end)
   end)
 
+  describe("send", function()
+    before_each(function()
+      review.open({ diff = SAMPLE_DIFF })
+      cursor_to_line("+local b = 3")
+      input_response = "have a look at this"
+      keymaps["c"]()
+    end)
+
+    it("releases waiters without closing the review", function()
+      local payload
+      review.wait({ mode = "finish", author = "user" }, function(result)
+        payload = result
+      end)
+
+      local sent = review.send("user wrote")
+
+      assert.is_true(sent)
+      assert.are.equal("sent", payload.status)
+      assert.are.equal("have a look at this", payload.comments[1].body)
+      -- The whole point: the pane survives so the conversation can continue.
+      assert.is_not_nil(review.session)
+    end)
+
+    it("marks replies as sent so they stop counting as unsent", function()
+      review.send("user wrote")
+
+      local comments = review.get_comments({ author = "user" })
+      assert.is_true(comments[1].sent)
+    end)
+
+    it("carries only the new reply on a second round", function()
+      review.send("first round")
+      local first = review.get_comments({ author = "user" })[1]
+
+      local second
+      review.wait({ mode = "finish", author = "user", since = first.id }, function(result)
+        second = result
+      end)
+      assert.is_nil(second, "the second wait must block until the user writes again")
+
+      input_response = "and another thing"
+      keymaps["c"]()
+      review.send("second round")
+
+      assert.are.equal(1, #second.comments)
+      assert.are.equal("and another thing", second.comments[1].body)
+    end)
+
+    it("is a no-op without a review", function()
+      review.close("test")
+
+      assert.is_false(review.send("nothing to send"))
+    end)
+  end)
+
   describe("results after the session is gone", function()
     before_each(function()
       review.open({ diff = SAMPLE_DIFF })
