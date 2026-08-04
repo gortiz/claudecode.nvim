@@ -270,6 +270,40 @@ session teardown, so a poller that arrives after `q` still collects them.
 Only one review is open at a time; opening a new one replaces it. Closing the buffer
 or quitting Neovim releases anyone waiting rather than leaving them hanging.
 
+## Inline Notes
+
+A review renders a diff and owns its buffer. Sometimes there is no diff — you want to
+talk about code that is simply _there_. `claudecode.notes` hangs comments off your real
+buffers instead: no rendered view, no buffer of ours, nothing to flush.
+
+```bash
+nvim-annotate add --file src/app.lua --line 42 --body "this allocates per row"
+nvim-annotate list --author user --since 7    # what the user wrote back
+nvim-annotate goto --file src/app.lua --line 42
+nvim-annotate clear --file src/app.lua
+```
+
+Because the notes live on the real buffer, **editing, LSP, treesitter, undo and folds
+all keep working normally** — which is the difference from a review, where the buffer
+is a read-only rendering.
+
+Each note _is_ an extmark carrying its own virtual lines, so it moves with your edits:
+insert ten lines above and the note stays on the code it was about, rather than
+pointing at a line number that went stale. When a buffer unloads, the extmark's last
+position is written back; when the file loads again, the note re-anchors from there.
+
+There is no send step and nothing blocks. Write notes as you read, then tell the agent
+to collect them — it polls `list --author user --since <highest id it has seen>`.
+
+| Key          | Action                        |
+| ------------ | ----------------------------- |
+| `<leader>An` | Note on this line             |
+| `<leader>Ax` | Delete your note on this line |
+| `]n` / `[n`  | Next / previous note          |
+
+Choosing between the two: **`nvim-review` for "here is a change, let us discuss it"**,
+**notes for "look at these lines in your code"**.
+
 ## Working with Diffs
 
 When Claude proposes changes, the plugin opens a native Neovim diff view:

@@ -9,6 +9,7 @@
 
 local logger = require("claudecode.logger")
 local parse = require("claudecode.review.parse")
+local render = require("claudecode.annotations.render")
 local utils = require("claudecode.utils")
 
 local M = {}
@@ -45,21 +46,7 @@ M.last_result = nil
 
 local session_counter = 0
 
---- Highlight groups, all linked by default so colorschemes can override them.
-local function setup_highlights()
-  local links = {
-    ClaudeCodeReviewFile = "Title",
-    ClaudeCodeReviewStat = "Comment",
-    ClaudeCodeReviewLineNr = "LineNr",
-    ClaudeCodeReviewAgent = "DiagnosticVirtualTextInfo",
-    ClaudeCodeReviewAgentLabel = "DiagnosticInfo",
-    ClaudeCodeReviewUser = "DiagnosticVirtualTextWarn",
-    ClaudeCodeReviewUserLabel = "DiagnosticWarn",
-  }
-  for group, target in pairs(links) do
-    vim.api.nvim_set_hl(0, group, { link = target, default = true })
-  end
-end
+local setup_highlights = render.setup_highlights
 
 local function has_inline_virt_text()
   return vim.fn.has("nvim-0.10") == 1
@@ -203,36 +190,6 @@ local function apply_static_marks(session)
   end
 end
 
----Wrap a comment body to the available width.
----@param body string
----@param width number
----@return string[]
-local function wrap_body(body, width)
-  local out = {}
-  for _, paragraph in ipairs(vim.split(body, "\n", { plain = true })) do
-    if paragraph == "" then
-      out[#out + 1] = ""
-    end
-    local current = ""
-    for word in paragraph:gmatch("%S+") do
-      if current == "" then
-        current = word
-      elseif #current + #word + 1 <= width then
-        current = current .. " " .. word
-      else
-        out[#out + 1] = current
-        current = word
-      end
-    end
-    if current ~= "" then
-      out[#out + 1] = current
-    end
-  end
-  if #out == 0 then
-    out[1] = ""
-  end
-  return out
-end
 
 ---@param session ClaudeCodeReviewSession
 ---@param comment ClaudeCodeReviewComment
@@ -253,12 +210,7 @@ local function apply_comment_marks(session)
   end
   vim.api.nvim_buf_clear_namespace(session.bufnr, NS_COMMENTS, 0, -1)
 
-  local win_width = 100
-  if session.win and vim.api.nvim_win_is_valid(session.win) then
-    win_width = vim.api.nvim_win_get_width(session.win)
-  end
-  local indent = "    "
-  local wrap_width = math.max(30, win_width - #indent - 12)
+  local wrap_width = render.wrap_width(session.win)
 
   -- Group by row so several comments on one line stack in id order.
   local by_row = {}
@@ -271,33 +223,14 @@ local function apply_comment_marks(session)
   end
 
   for row, comments in pairs(by_row) do
-    local virt_lines = {}
-    for _, comment in ipairs(comments) do
-      local body_hl = comment.author == "agent" and "ClaudeCodeReviewAgent" or "ClaudeCodeReviewUser"
-      local label_hl = comment.author == "agent" and "ClaudeCodeReviewAgentLabel" or "ClaudeCodeReviewUserLabel"
-      local label = comment.author == "agent" and "claude" or "you"
-      for index, text in ipairs(wrap_body(comment.body, wrap_width)) do
-        if index == 1 then
-          virt_lines[#virt_lines + 1] = {
-            { indent .. "▌ ", label_hl },
-            { label .. " #" .. comment.id .. ": ", label_hl },
-            { text, body_hl },
-          }
-        else
-          virt_lines[#virt_lines + 1] = {
-            { indent .. "▌ ", label_hl },
-            { string.rep(" ", #label + #tostring(comment.id) + 3) .. text, body_hl },
-          }
-        end
-      end
-    end
+    local virt_lines = render.virt_lines(comments, wrap_width)
 
     local opts = { virt_lines = virt_lines, virt_lines_above = false }
     local ok = pcall(vim.api.nvim_buf_set_extmark, session.bufnr, NS_COMMENTS, row, 0, {
       virt_lines = virt_lines,
       virt_lines_above = false,
       sign_text = "▌",
-      sign_hl_group = comments[1].author == "agent" and "ClaudeCodeReviewAgentLabel" or "ClaudeCodeReviewUserLabel",
+      sign_hl_group = select(2, render.styles(comments[1].author)),
     })
     if not ok then
       -- Older Neovim without extmark signs.
