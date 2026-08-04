@@ -198,6 +198,37 @@ Configure the plugin with the detected path:
 - `:ClaudeCodeAdd <file-path> [start-line] [end-line]` - Add specific file to Claude context with optional line range
 - `:ClaudeCodeDiffAccept` - Accept diff changes
 - `:ClaudeCodeDiffDeny` - Reject diff changes
+- `:ClaudeCodeReviewFinish` - Finish the current review and send your comments back to Claude
+- `:ClaudeCodeReviewClose` - Discard the current review without sending anything
+
+## Interactive Reviews
+
+`openDiff` is for changes Claude wants you to accept or reject. A **review** is for changes — or code, or a plan — you want to _talk about_ first, with both sides annotating the same lines.
+
+Claude opens one with `openReview`, passing a unified diff (`git diff`, `git show`, a range) or a list of files to display in full. The diff is rendered in a normal buffer, and Claude can then:
+
+- `addReviewComments` — attach inline notes to specific lines, so it explains a change on the lines it means instead of in prose
+- `navigateReview` — move your cursor to the line it is talking about
+- `getReviewComments` — read your replies back, optionally **blocking** until you are done
+- `closeReview` — clean up
+
+In the review buffer:
+
+| Key       | Action                                        |
+| --------- | --------------------------------------------- |
+| `c`       | Comment on this line                          |
+| `C`       | Comment on this line in a multi-line editor    |
+| `x`       | Delete your comment on this line               |
+| `]h` `[h` | Next / previous hunk                           |
+| `]f` `[f` | Next / previous file                           |
+| `]n` `[n` | Next / previous comment                        |
+| `<CR>`    | Open the real file at this line                |
+| `q`       | Finish the review — this is what unblocks Claude |
+| `?`       | Show these keys                                |
+
+Claude's notes appear in one colour, yours in another. The typical loop is: Claude opens a review, drops a few notes on the parts you would otherwise miss, then calls `getReviewComments` with `wait: "finish"` and waits. You read, reply inline on the lines you disagree with, press `q`, and Claude picks up exactly which line each objection was about.
+
+Only one review is open at a time; opening a new one replaces it. If you close the buffer or quit Neovim, a waiting Claude is released rather than left hanging.
 
 ## Working with Diffs
 

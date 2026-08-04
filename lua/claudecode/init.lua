@@ -1049,6 +1049,19 @@ function M._create_commands()
     nargs = "*",
     desc = "Select and open Claude terminal with chosen model and optional arguments",
   })
+
+  -- Review session commands
+  vim.api.nvim_create_user_command("ClaudeCodeReviewFinish", function()
+    require("claudecode.review").finish("user ran :ClaudeCodeReviewFinish")
+  end, {
+    desc = "Finish the current Claude review and send the comments back",
+  })
+
+  vim.api.nvim_create_user_command("ClaudeCodeReviewClose", function()
+    require("claudecode.review").close("user ran :ClaudeCodeReviewClose")
+  end, {
+    desc = "Discard the current Claude review without finishing it",
+  })
 end
 
 M.open_with_model = function(additional_args)
