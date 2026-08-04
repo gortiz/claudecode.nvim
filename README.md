@@ -232,17 +232,29 @@ blocks Neovim's main loop: a caller that wants to wait polls `get`.
 
 In the review buffer:
 
-| Key       | Action                                                     |
-| --------- | ---------------------------------------------------------- |
-| `c`       | Comment on this line                                       |
-| `C`       | Comment on this line in a multi-line editor                |
-| `x`       | Delete your comment on this line                           |
-| `]h` `[h` | Next / previous hunk                                       |
-| `]f` `[f` | Next / previous file                                       |
-| `]n` `[n` | Next / previous comment                                    |
-| `<CR>`    | Open the real file at this line                            |
-| `q`       | Finish the review — this is what releases a waiting caller |
-| `?`       | Show these keys                                            |
+| Key       | Action                                      |
+| --------- | ------------------------------------------- |
+| `c`       | Comment on this line                        |
+| `C`       | Comment on this line in a multi-line editor |
+| `x`       | Delete your comment on this line            |
+| `]h` `[h` | Next / previous hunk                        |
+| `]f` `[f` | Next / previous file                        |
+| `]n` `[n` | Next / previous comment                     |
+| `<CR>`    | Open the real file at this line             |
+| `?`       | Show these keys                             |
+
+| Command | Action                                                                        |
+| ------- | ----------------------------------------------------------------------------- |
+| `:w`    | Finish the review and send your replies — this releases a waiting caller      |
+| `:q`    | Close. **Refused while replies are unsent**, exactly like any modified buffer |
+| `:q!`   | Discard the review and your replies                                           |
+
+The protection is Neovim's own `E37` rather than an imitation of it: the buffer is
+`buftype=acwrite` with `bufhidden=wipe`, unsent replies set `'modified'`, and sending
+or deleting them clears it. `q` is still mapped, and is now just `:q`.
+
+In the multi-line comment editor (`C`), `<C-s>` or `:w` sends and `<C-c>` or `q`
+discards — `:w` also works where a terminal eats `<C-s>` as flow control.
 
 Agent notes appear in one colour, yours in another. The typical loop: open a review,
 drop a few notes on the parts the reader would otherwise miss, then poll with
