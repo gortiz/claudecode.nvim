@@ -405,6 +405,24 @@ local function push_comment(session, comment)
   return comment
 end
 
+---Unsent replies make the buffer dirty, which is what earns us :q protection for
+---free — Neovim raises E37 rather than us imitating it. Sending or discarding clears
+---the flag.
+---@param session ClaudeCodeReviewSession
+local function sync_modified(session)
+  if session.wiping or not session.bufnr or not vim.api.nvim_buf_is_valid(session.bufnr) then
+    return
+  end
+  local unsent = false
+  for _, comment in ipairs(session.comments) do
+    if comment.author == "user" then
+      unsent = true
+      break
+    end
+  end
+  vim.api.nvim_set_option_value("modified", unsent, { buf = session.bufnr })
+end
+
 ---@param session ClaudeCodeReviewSession
 ---@param body string
 local function add_user_comment(session, body)
@@ -427,6 +445,7 @@ local function add_user_comment(session, body)
     anchored = true,
   })
   apply_comment_marks(session)
+  sync_modified(session)
   resolve_waiters(session, "comment", true)
 end
 
@@ -440,7 +459,9 @@ local function open_comment_editor(session)
   end
 
   local bufnr = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_set_option_value("buftype", "nofile", { buf = bufnr })
+  -- acwrite so :w reaches the BufWriteCmd below. Writing a scratch buffer is the
+  -- reflex, and it works where <C-s> gets eaten by terminal flow control.
+  vim.api.nvim_set_option_value("buftype", "acwrite", { buf = bufnr })
   vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = bufnr })
   vim.api.nvim_set_option_value("filetype", "markdown", { buf = bufnr })
   vim.api.nvim_buf_set_name(bufnr, "claude-review-comment-" .. bufnr)
@@ -451,7 +472,7 @@ local function open_comment_editor(session)
   vim.api.nvim_set_option_value(
     "winbar",
     string.format(
-      "Comment on %s:%d  —  <C-s> submit, <C-c> cancel",
+      "Comment on %s:%d  —  <C-s> or :w send · <C-c> or q discard",
       location.path,
       location.new_line or location.old_line
     ),
@@ -472,6 +493,11 @@ local function open_comment_editor(session)
     end
     add_user_comment(session, body)
   end
+
+  vim.api.nvim_create_autocmd("BufWriteCmd", {
+    buffer = bufnr,
+    callback = submit,
+  })
 
   for _, mode in ipairs({ "n", "i" }) do
     vim.keymap.set(mode, "<C-s>", submit, { buffer = bufnr, desc = "Submit review comment" })
@@ -495,6 +521,7 @@ local function delete_comment_under_cursor(session)
     if comment.author == "user" and comment.path == location.path and comment.side == side and comment.line == line then
       table.remove(session.comments, index)
       apply_comment_marks(session)
+      sync_modified(session)
       return
     end
   end
@@ -569,12 +596,18 @@ Claude review — keys
 
   c        comment on this line (one line)
   C        comment on this line (multi-line editor)
+             <C-s> or :w   send the comment
+             <C-c> or q    discard it
   x        delete your comment on this line
   ]h / [h  next / previous hunk
   ]f / [f  next / previous file
   ]n / [n  next / previous comment
   <CR>     open the real file at this line
-  q        finish the review (unblocks Claude)
+
+  :w       finish the review and send your replies
+  :q       close — refused while replies are unsent, like any modified buffer
+  :q!      discard the review and your replies
+  q        same as :q
   ?        this help
 ]]
 
@@ -643,9 +676,12 @@ local function setup_keymaps(session)
     jump_to(session, comment_rows(), -1)
   end, "Previous comment")
 
+  -- Deliberately NOT "finish". One keystroke that sends your replies and closes
+  -- everything is far too easy to hit by accident; this is an ordinary :q, which
+  -- Neovim refuses while replies are unsent.
   map("q", function()
-    M.finish("user finished the review")
-  end, "Finish the review")
+    vim.cmd("q")
+  end, "Close (refused while replies are unsent)")
 
   map("?", function()
     vim.notify(HELP, vim.log.levels.INFO, { title = "Claude review" })
@@ -713,12 +749,20 @@ function M.open(opts)
   build_lines(session)
 
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, session.lines)
-  vim.api.nvim_set_option_value("buftype", "nofile", { buf = bufnr })
+  -- acwrite rather than nofile, and wipe rather than hide, is what makes Neovim's own
+  -- E37 fire on :q while there are unsent comments. Imitating that protection with a
+  -- confirm prompt would behave subtly differently from every other buffer; this IS
+  -- the mechanism. :w finishes the review, :q! discards it.
+  vim.api.nvim_set_option_value("buftype", "acwrite", { buf = bufnr })
   vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = bufnr })
   vim.api.nvim_set_option_value("swapfile", false, { buf = bufnr })
   vim.api.nvim_set_option_value("modifiable", false, { buf = bufnr })
   vim.api.nvim_set_option_value("filetype", "diff", { buf = bufnr })
   vim.api.nvim_buf_set_name(bufnr, "claude-review-" .. session.id)
+  -- Writing the diff into the buffer marks it modified, and on an acwrite buffer that
+  -- would make a brand-new review refuse :q before anyone has said anything. Only the
+  -- user's own replies should count as unsent.
+  vim.api.nvim_set_option_value("modified", false, { buf = bufnr })
 
   local target = find_editor_window()
   if target then
@@ -735,18 +779,39 @@ function M.open(opts)
   vim.api.nvim_set_option_value("number", false, { win = session.win })
   vim.api.nvim_set_option_value("relativenumber", false, { win = session.win })
   vim.api.nvim_set_option_value("signcolumn", "yes", { win = session.win })
-  pcall(vim.api.nvim_set_option_value, "winbar", session.title .. "  —  press ? for keys", { win = session.win })
+  pcall(
+    vim.api.nvim_set_option_value,
+    "winbar",
+    session.title .. "  —  c comment · :w send · :q! discard · ? keys",
+    { win = session.win }
+  )
 
   apply_static_marks(session)
   setup_keymaps(session)
 
-  -- If the user wipes the buffer we must not leave the agent hanging.
+  -- :w means "I am done, send these" — the same reflex as accepting a diff.
+  vim.api.nvim_create_autocmd("BufWriteCmd", {
+    buffer = bufnr,
+    callback = function()
+      M.finish("user wrote the review buffer")
+    end,
+  })
+
+  -- If the user wipes the buffer we must not leave the agent hanging. `wiping` marks
+  -- that Neovim is already tearing the buffer down, so the teardown below does not
+  -- try to delete a buffer that is mid-wipe (E937).
   vim.api.nvim_create_autocmd({ "BufWipeout" }, {
     buffer = bufnr,
     once = true,
     callback = function()
-      if M.session and M.session.bufnr == bufnr and not M.session.finished then
-        M.finish("review buffer closed")
+      if M.session and M.session.bufnr == bufnr then
+        M.session.wiping = true
+        if not M.session.finished then
+          -- Closing the window without writing is a DISCARD, not a send — the same
+          -- meaning :q! has anywhere else. Waiters are still released, so nobody is
+          -- left hanging, but they hear "closed" rather than "finished".
+          M.close("review buffer closed without writing")
+        end
       end
     end,
   })
@@ -969,6 +1034,11 @@ function M.finish(reason)
     return
   end
   session.finished = true
+  -- The replies are on their way out, so the buffer is no longer dirty. Clearing this
+  -- before teardown also stops :wq tripping over its own protection.
+  if not session.wiping and session.bufnr and vim.api.nvim_buf_is_valid(session.bufnr) then
+    pcall(vim.api.nvim_set_option_value, "modified", false, { buf = session.bufnr })
+  end
   logger.debug("review", "Finished " .. session.id .. ": " .. tostring(reason))
   resolve_waiters(session, "finished", false)
   vim.notify("Review finished — Claude has your comments", vim.log.levels.INFO)
@@ -1003,7 +1073,9 @@ function M.close(reason)
     resolve_waiters(session, "finished", false)
   end
 
-  if session.bufnr and vim.api.nvim_buf_is_valid(session.bufnr) then
+  -- Skip when Neovim is already wiping it: deleting a buffer that is mid-wipe raises
+  -- E937 out of the autocommand, which surfaces as a failed :q.
+  if not session.wiping and session.bufnr and vim.api.nvim_buf_is_valid(session.bufnr) then
     pcall(vim.api.nvim_buf_delete, session.bufnr, { force = true })
   end
   logger.debug("review", "Closed session: " .. tostring(reason))
