@@ -387,6 +387,21 @@ describe("Lockfile Module", function()
       assert(read_error == nil)
     end)
 
+    it("should write the given IDE name, or Neovim by default", function()
+      local function written(path)
+        local file = io.open(path, "r")
+        local content = file:read("*a")
+        file:close()
+        return content
+      end
+
+      local _, named_path = lockfile.create(12347, nil, "Neovim wG:pR")
+      assert(written(named_path):find('"ideName":"Neovim wG:pR"', 1, true))
+
+      local _, default_path = lockfile.create(12348)
+      assert(written(default_path):find('"ideName":"Neovim"', 1, true))
+    end)
+
     it("should handle missing lock files when reading auth tokens", function()
       local nonexistent_port = 99999
       local success, token, error = lockfile.get_auth_token(nonexistent_port)

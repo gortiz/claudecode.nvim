@@ -32,6 +32,7 @@ M.state = {
   server = nil,
   port = nil,
   auth_token = nil,
+  ide_name = nil, -- the name last written to the lock file
   initialized = false,
   mention_queue = {},
   mention_timer = nil,
@@ -392,6 +393,36 @@ end
 ---@param show_startup_notification? boolean Whether to show a notification upon successful startup (defaults to true)
 ---@return boolean success Whether the operation was successful
 ---@return number|string port_or_error The WebSocket port if successful, or error message if failed
+---The name for the lock file, from config.ide_name: a string, or a function(port).
+---@return string|nil name nil means the lock file default
+local function resolve_ide_name()
+  local ide_name = M.state.config and M.state.config.ide_name
+  if type(ide_name) == "function" then
+    local ok, name = pcall(ide_name, M.state.port)
+    return ok and type(name) == "string" and name ~= "" and name or nil
+  end
+  return ide_name
+end
+
+---Rewrite the lock file when config.ide_name now gives another name, for example
+---when it names the current file. Claude Code reads the name for its /ide picker;
+---port and auth token stay the same, so a connected session is not affected.
+---@return boolean changed
+function M.refresh_ide_name()
+  if not M.state.server or not M.state.port or not M.state.auth_token then
+    return false
+  end
+  local ide_name = resolve_ide_name()
+  if ide_name == M.state.ide_name then
+    return false
+  end
+  local ok = require("claudecode.lockfile").create(M.state.port, M.state.auth_token, ide_name)
+  if ok then
+    M.state.ide_name = ide_name
+  end
+  return ok
+end
+
 function M.start(show_startup_notification)
   if show_startup_notification == nil then
     show_startup_notification = true
@@ -441,7 +472,9 @@ function M.start(show_startup_notification)
   M.state.port = tonumber(result)
   M.state.auth_token = auth_token
 
-  local lock_success, lock_result, returned_auth_token = lockfile.create(M.state.port, auth_token)
+  local ide_name = resolve_ide_name()
+  local lock_success, lock_result, returned_auth_token = lockfile.create(M.state.port, auth_token, ide_name)
+  M.state.ide_name = ide_name
 
   if not lock_success then
     server.stop()
@@ -513,6 +546,7 @@ function M.stop()
   M.state.server = nil
   M.state.port = nil
   M.state.auth_token = nil
+  M.state.ide_name = nil
 
   -- Clear any queued @ mentions when server stops
   clear_mention_queue()

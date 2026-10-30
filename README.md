@@ -371,6 +371,9 @@ For deep technical details, see [ARCHITECTURE.md](./ARCHITECTURE.md).
     -- Server Configuration
     port_range = { min = 10000, max = 65535 },
     auto_start = true,
+    ide_name = "Neovim", -- Name in Claude Code's /ide picker, or a function(port)
+                         -- returning one. Call require("claudecode").refresh_ide_name()
+                         -- (on BufEnter, say) to rename as the editor's state changes.
     log_level = "info", -- "trace", "debug", "info", "warn", "error"
     terminal_cmd = nil, -- Custom terminal command (default: "claude")
                         -- For local installations: "~/.claude/local/claude"

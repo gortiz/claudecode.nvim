@@ -10,6 +10,9 @@ local M = {}
 M.defaults = {
   port_range = { min = 10000, max = 65535 },
   auto_start = true,
+  -- Name in the lock file, which Claude Code's /ide picker shows. A string, or a
+  -- function(port) returning one, to tell apart several editors on the same folder.
+  ide_name = "Neovim",
   terminal_cmd = nil,
   env = {}, -- Custom environment variables for Claude terminal
   log_level = "info",
@@ -52,6 +55,13 @@ function M.validate(config)
   )
 
   assert(type(config.auto_start) == "boolean", "auto_start must be a boolean")
+
+  assert(
+    config.ide_name == nil
+      or (type(config.ide_name) == "string" and config.ide_name ~= "")
+      or type(config.ide_name) == "function",
+    "ide_name must be a non-empty string or a function(port) returning one"
+  )
 
   assert(config.terminal_cmd == nil or type(config.terminal_cmd) == "string", "terminal_cmd must be nil or a string")
 

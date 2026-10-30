@@ -69,10 +69,11 @@ end
 ---Create the lock file for a specified WebSocket port
 ---@param port number The port number for the WebSocket server
 ---@param auth_token? string Optional pre-generated auth token (generates new one if not provided)
+---@param ide_name? string Name shown in Claude Code's /ide picker (default "Neovim")
 ---@return boolean success Whether the operation was successful
 ---@return string result_or_error The lock file path if successful, or error message if failed
 ---@return string? auth_token The authentication token if successful
-function M.create(port, auth_token)
+function M.create(port, auth_token, ide_name)
   if not port or type(port) ~= "number" then
     return false, "Invalid port number"
   end
@@ -115,7 +116,7 @@ function M.create(port, auth_token)
   local lock_content = {
     pid = vim.fn.getpid(),
     workspaceFolders = workspace_folders,
-    ideName = "Neovim",
+    ideName = ide_name or "Neovim",
     transport = "ws",
     authToken = auth_token,
   }
