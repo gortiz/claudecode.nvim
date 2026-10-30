@@ -304,6 +304,28 @@ to collect them — it polls `list --author user --since <highest id it has seen
 Choosing between the two: **`nvim-review` for "here is a change, let us discuss it"**,
 **notes for "look at these lines in your code"**.
 
+## Language Servers from the Shell
+
+The plugin implements `findReferences`, `renameSymbol`, `formatDocument` and other LSP
+tools over MCP, but Claude Code does not give them to the model. `claudecode.lsp.cli`
+makes the same handlers available on the shell route, together with server
+management:
+
+```bash
+nvim-lsp status                                          # servers, roots, RSS
+nvim-lsp start --file src/Foo.java                       # explicit, never implicit
+nvim-lsp references --file src/Foo.java --line 12 --symbol bar
+nvim-lsp rename --file src/Foo.java --line 12 --symbol bar --to baz
+nvim-lsp stop --name jdtls --root ~/work/big-worktree
+```
+
+The file does not need to be open in the editor. A query never starts a server. This
+matters for large Java worktrees, where each jdtls costs gigabytes. `start` sets
+`b:lsp_force_start` on the buffer and runs its `FileType` autocommands again. A config
+that turns off autostart for some directories must check that flag. `rename` and
+`format` write the buffers they change. A buffer that already had unsaved edits is not
+written. The response lists it under `unsaved`.
+
 ## Working with Diffs
 
 When Claude proposes changes, the plugin opens a native Neovim diff view:
