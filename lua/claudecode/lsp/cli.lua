@@ -13,6 +13,8 @@
 ---   * rename and format write the buffers they changed to disk, so the caller's own
 ---     file reads see the result. Buffers that already had unsaved edits are left
 ---     alone and reported, never written over the user's work.
+---   * diagnostics answers for a file that is not open yet, and says when the
+---     server has not reported on it, so an empty list is never mistaken for clean.
 ---   * status, start and stop manage the servers themselves. Large Java worktrees
 ---     are kept without a server on purpose (RAM), so nothing here starts one
 ---     implicitly: start is always an explicit request.
@@ -309,12 +311,95 @@ local function write_changes(before)
   return written, unsaved
 end
 
+local SEVERITY_NAMES = { "error", "warning", "info", "hint" }
+
+---@param list vim.Diagnostic[]
+---@return table[] diagnostics 1-indexed, sorted by file and position
+local function describe_diagnostics(list)
+  local out = {}
+  for _, d in ipairs(list) do
+    local path = vim.api.nvim_buf_get_name(d.bufnr)
+    if path ~= "" then
+      out[#out + 1] = {
+        path = path,
+        line = d.lnum + 1,
+        column = d.col + 1,
+        end_line = d.end_lnum and d.end_lnum + 1 or nil,
+        severity = SEVERITY_NAMES[d.severity] or tostring(d.severity),
+        message = d.message,
+        source = d.source,
+        code = d.code,
+      }
+    end
+  end
+  table.sort(out, function(a, b)
+    if a.path ~= b.path then
+      return a.path < b.path
+    end
+    if a.line ~= b.line then
+      return a.line < b.line
+    end
+    return a.column < b.column
+  end)
+  return out
+end
+
+---Diagnostics of one file, or of every loaded buffer when no file is given.
+---
+---The MCP getDiagnostics tool only answers for files already open. Here a file is
+---loaded if needed, like the other actions do. A server that just attached has not
+---analysed the file yet, and an empty list then would read as "clean". So when the
+---file had no server attached before this call, wait for the first report on it,
+---and say "pending" if none came in time.
+local function diagnostics(request)
+  if type(request.path) ~= "string" or request.path == "" then
+    return { ok = true, data = { diagnostics = describe_diagnostics(vim.diagnostic.get(nil)) } }
+  end
+
+  local existing = vim.fn.bufnr(request.path)
+  local analysed = existing ~= -1
+    and vim.api.nvim_buf_is_loaded(existing)
+    and #vim.lsp.get_clients({ bufnr = existing }) > 0
+
+  -- Registered before loading: the first report can arrive while ensure_buffer waits.
+  local reported = analysed
+  local group = vim.api.nvim_create_augroup("ClaudeCodeLspCliDiagnostics", { clear = true })
+  vim.api.nvim_create_autocmd("DiagnosticChanged", {
+    group = group,
+    callback = function(args)
+      if vim.api.nvim_buf_get_name(args.buf) == request.path then
+        reported = true
+      end
+    end,
+  })
+
+  local wait_ms = tonumber(request.wait_ms) or DEFAULT_ATTACH_WAIT_MS
+  local bufnr, err = ensure_buffer(request.path, wait_ms)
+  if bufnr then
+    vim.wait(wait_ms, function()
+      return reported
+    end, 50)
+  end
+  vim.api.nvim_del_augroup_by_id(group)
+  if not bufnr then
+    return { ok = false, error = err }
+  end
+
+  return {
+    ok = true,
+    data = { diagnostics = describe_diagnostics(vim.diagnostic.get(bufnr)), pending = not reported },
+  }
+end
+
 ---@param request table
 ---@return table response
 local function dispatch(request)
   local action = request.action
   if action == "status" then
     return status()
+  end
+  if action == "diagnostics" then
+    return diagnostics(request)
   end
   if action == "start" then
     return start(request)
@@ -426,5 +511,6 @@ end
 
 M._dispatch = dispatch
 M._resolve_column = resolve_column
+M._describe_diagnostics = describe_diagnostics
 
 return M

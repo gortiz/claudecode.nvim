@@ -42,6 +42,51 @@ describe("lsp CLI", function()
     end)
   end)
 
+  describe("describe_diagnostics", function()
+    local get_name
+
+    before_each(function()
+      get_name = vim.api.nvim_buf_get_name
+      local names = { [1] = "/b.lua", [2] = "/a.lua", [3] = "" }
+      vim.api.nvim_buf_get_name = function(bufnr)
+        return names[bufnr]
+      end
+    end)
+
+    after_each(function()
+      vim.api.nvim_buf_get_name = get_name
+    end)
+
+    it("converts to 1-indexed positions and severity names, sorted by file and line", function()
+      local out = cli._describe_diagnostics({
+        { bufnr = 1, lnum = 4, col = 0, severity = 2, message = "unused", source = "lua_ls" },
+        { bufnr = 2, lnum = 9, col = 3, severity = 1, message = "late" },
+        { bufnr = 2, lnum = 0, col = 7, end_lnum = 1, severity = 1, message = "early", code = 42 },
+      })
+
+      assert.are.equal(3, #out)
+      assert.are.same({
+        path = "/a.lua",
+        line = 1,
+        column = 8,
+        end_line = 2,
+        severity = "error",
+        message = "early",
+        code = 42,
+      }, out[1])
+      assert.are.equal("late", out[2].message)
+      assert.are.equal("/b.lua", out[3].path)
+      assert.are.equal("warning", out[3].severity)
+      assert.are.equal(5, out[3].line)
+    end)
+
+    it("drops diagnostics of unnamed buffers", function()
+      local out = cli._describe_diagnostics({ { bufnr = 3, lnum = 0, col = 0, severity = 1, message = "x" } })
+
+      assert.are.equal(0, #out)
+    end)
+  end)
+
   describe("resolve_column", function()
     it("takes an explicit column as is", function()
       assert.are.equal(7, cli._resolve_column(1, { line = 1, column = 7 }))
