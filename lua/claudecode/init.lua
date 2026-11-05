@@ -33,6 +33,7 @@ M.state = {
   port = nil,
   auth_token = nil,
   ide_name = nil, -- the name last written to the lock file
+  workspace_folders = nil, -- the folders last written to the lock file, joined
   initialized = false,
   mention_queue = {},
   mention_timer = nil,
@@ -404,24 +405,33 @@ local function resolve_ide_name()
   return ide_name
 end
 
----Rewrite the lock file when config.ide_name now gives another name, for example
----when it names the current file. Claude Code reads the name for its /ide picker;
----port and auth token stay the same, so a connected session is not affected.
+---Rewrite the lock file when what it advertises changed: the name from
+---config.ide_name (it can follow the current file), or the workspace folders
+---(after :cd, or when a language server adds its own). Claude Code reads both for
+---its /ide picker, and offers an IDE only when a folder contains its cwd, so stale
+---folders hide this editor. Port and auth token stay the same, so a connected
+---session is not affected.
 ---@return boolean changed
-function M.refresh_ide_name()
+function M.refresh_lockfile()
   if not M.state.server or not M.state.port or not M.state.auth_token then
     return false
   end
+  local lockfile = require("claudecode.lockfile")
   local ide_name = resolve_ide_name()
-  if ide_name == M.state.ide_name then
+  local folders = table.concat(lockfile.get_workspace_folders(), "\n")
+  if ide_name == M.state.ide_name and folders == M.state.workspace_folders then
     return false
   end
-  local ok = require("claudecode.lockfile").create(M.state.port, M.state.auth_token, ide_name)
+  local ok = lockfile.create(M.state.port, M.state.auth_token, ide_name)
   if ok then
     M.state.ide_name = ide_name
+    M.state.workspace_folders = folders
   end
   return ok
 end
+
+-- Kept for configs that call it from their own autocommands.
+M.refresh_ide_name = M.refresh_lockfile
 
 function M.start(show_startup_notification)
   if show_startup_notification == nil then
@@ -475,6 +485,17 @@ function M.start(show_startup_notification)
   local ide_name = resolve_ide_name()
   local lock_success, lock_result, returned_auth_token = lockfile.create(M.state.port, auth_token, ide_name)
   M.state.ide_name = ide_name
+  -- Left nil: the first refresh compares against nothing and rewrites the same
+  -- content once, which is harmless.
+  M.state.workspace_folders = nil
+
+  vim.api.nvim_create_autocmd({ "DirChanged", "LspAttach", "LspDetach" }, {
+    group = vim.api.nvim_create_augroup("ClaudeCodeLockfileRefresh", { clear = true }),
+    -- Deferred: LspDetach fires while the client is still listed.
+    callback = function()
+      vim.schedule(M.refresh_lockfile)
+    end,
+  })
 
   if not lock_success then
     server.stop()
@@ -524,6 +545,7 @@ function M.stop()
   end
 
   local lockfile = require("claudecode.lockfile")
+  pcall(vim.api.nvim_del_augroup_by_name, "ClaudeCodeLockfileRefresh")
   local lock_success, lock_error = lockfile.remove(M.state.port)
 
   if not lock_success then

@@ -287,6 +287,23 @@ describe("Lockfile Module", function()
       assert("/mock/cwd" == folders[1])
     end)
 
+    it("should add the repository root of a subdirectory cwd", function()
+      local saved_fs = vim.fs
+      vim.fs = {
+        root = function(path, marker)
+          assert("/mock/cwd" == path and ".git" == marker)
+          return "/mock"
+        end,
+      }
+
+      local folders = lockfile.get_workspace_folders()
+      vim.fs = saved_fs
+
+      assert(2 == #folders)
+      assert("/mock/cwd" == folders[1])
+      assert("/mock" == folders[2])
+    end)
+
     it("should work with current Neovim API (get_clients)", function()
       -- Set up the current API mock
       create_mock_env("current")

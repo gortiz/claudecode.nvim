@@ -378,25 +378,126 @@ function M.jump(direction)
   vim.cmd("normal! zz")
 end
 
----Add a note on the current line, prompting for the body.
+---Open a split to write a note body of any length. :w saves the note (and keeps the
+---window, so you can go on editing it), :q closes it; :q with unsaved text refuses
+---like any modified buffer. Writing an empty body deletes the note.
+---@param opts {path: string, line: number, note?: ClaudeCodeNote}
+function M.open_editor(opts)
+  local origin_win = vim.api.nvim_get_current_win()
+  local note = opts.note
+  local label = vim.fn.fnamemodify(opts.path, ":~:.") .. ":" .. opts.line
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  -- acwrite: :w runs BufWriteCmd below instead of writing a file, and unsaved text
+  -- counts as a change, so :q warns instead of losing it.
+  vim.bo[buf].buftype = "acwrite"
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].swapfile = false
+  vim.api.nvim_buf_set_name(buf, ("claudecode-note://%s/%d"):format(note and note.id or "new", buf))
+  if note then
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(note.body, "\n", { plain = true }))
+  end
+  vim.bo[buf].filetype = "markdown"
+  vim.bo[buf].modified = false
+
+  vim.cmd("belowright 10split")
+  local win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(win, buf)
+  vim.wo[win].winbar = ("%%#Title# %s %s%%* — :w saves, :q closes"):format(
+    note and "Edit note on" or "Note on",
+    label
+  )
+
+  vim.api.nvim_create_autocmd("BufWriteCmd", {
+    buffer = buf,
+    callback = function()
+      local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      -- Drop trailing blank lines, keep everything else as written.
+      while #lines > 0 and vim.trim(lines[#lines]) == "" do
+        table.remove(lines)
+      end
+      local body = table.concat(lines, "\n")
+
+      if vim.trim(body) == "" then
+        if note and M.notes[note.id] then
+          M.remove(note.id)
+          note = nil
+          vim.notify("Note deleted", vim.log.levels.INFO)
+        end
+      elseif note and M.notes[note.id] then
+        -- A new id, so an agent polling `list --since <highest id seen>` sees the edit.
+        M.notes[note.id] = nil
+        note.id = next_id
+        next_id = next_id + 1
+        M.notes[note.id] = note
+        note.body = body
+        note.timestamp = os.time()
+        if note.bufnr then
+          redraw(note.bufnr)
+        end
+      else
+        local added, err = M.add({ path = opts.path, line = opts.line, body = body, author = "user" })
+        if not added then
+          vim.notify("claudecode notes: " .. tostring(err), vim.log.levels.ERROR)
+          return
+        end
+        note = added
+      end
+      vim.bo[buf].modified = false
+    end,
+  })
+
+  -- Back to the code when the editor closes.
+  vim.api.nvim_create_autocmd("BufWipeout", {
+    buffer = buf,
+    once = true,
+    callback = function()
+      vim.schedule(function()
+        if vim.api.nvim_win_is_valid(origin_win) then
+          vim.api.nvim_set_current_win(origin_win)
+        end
+      end)
+    end,
+  })
+
+  if not note then
+    vim.cmd("startinsert")
+  end
+  return buf
+end
+
+---Your own note on the current line, if any.
+---@return ClaudeCodeNote|nil
+local function own_note_here()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local line = vim.api.nvim_win_get_cursor(0)[1]
+  for _, note in ipairs(notes_for_buffer(bufnr)) do
+    if note.author == "user" and M.line_of(note) == line then
+      return note
+    end
+  end
+  return nil
+end
+
+---Add a note on the current line, in an editor split.
 function M.add_here()
   local bufnr = vim.api.nvim_get_current_buf()
   local name = vim.api.nvim_buf_get_name(bufnr)
-  if name == "" then
+  if name == "" or vim.bo[bufnr].buftype ~= "" then
     vim.notify("This buffer is not a file", vim.log.levels.WARN)
     return
   end
-  local line = vim.api.nvim_win_get_cursor(0)[1]
+  M.open_editor({ path = name, line = vim.api.nvim_win_get_cursor(0)[1] })
+end
 
-  vim.ui.input({ prompt = "Note: " }, function(input)
-    if not input or vim.trim(input) == "" then
-      return
-    end
-    local note, err = M.add({ path = name, line = line, body = input, author = "user" })
-    if not note then
-      vim.notify("claudecode notes: " .. tostring(err), vim.log.levels.ERROR)
-    end
-  end)
+---Edit your own note on the current line, in an editor split.
+function M.edit_here()
+  local note = own_note_here()
+  if not note then
+    vim.notify("No note of yours on this line", vim.log.levels.INFO)
+    return
+  end
+  M.open_editor({ path = note.path, line = M.line_of(note), note = note })
 end
 
 ---Delete your own note on the current line.

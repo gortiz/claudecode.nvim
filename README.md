@@ -298,7 +298,13 @@ to collect them — it polls `list --author user --since <highest id it has seen
 | Key          | Action                        |
 | ------------ | ----------------------------- |
 | `<leader>An` | Note on this line             |
+| `<leader>Ae` | Edit your note on this line   |
 | `<leader>Ax` | Delete your note on this line |
+
+`<leader>An` and `<leader>Ae` open the note in a split, so a note can have any number
+of lines. `:w` saves it and keeps the split open; `:q` closes it. An empty note
+deletes it on `:w`. An edited note gets a new id, so an agent that reads
+`list --since <highest id>` sees the edit.
 | `]n` / `[n`  | Next / previous note          |
 
 Choosing between the two: **`nvim-review` for "here is a change, let us discuss it"**,

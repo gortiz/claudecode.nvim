@@ -260,7 +260,18 @@ function M.get_workspace_folders()
   local folders = {}
 
   -- Add current working directory
-  table.insert(folders, vim.fn.getcwd())
+  local cwd = vim.fn.getcwd()
+  table.insert(folders, cwd)
+
+  -- And the repository (or worktree) it belongs to. Claude Code offers an IDE in
+  -- /ide only when one of these folders contains its own cwd, so an editor started
+  -- in a subdirectory would otherwise be unavailable to a Claude at the repo root.
+  local ok, root = pcall(function()
+    return vim.fs and vim.fs.root and vim.fs.root(cwd, ".git")
+  end)
+  if ok and type(root) == "string" and root ~= cwd then
+    table.insert(folders, root)
+  end
 
   -- Get LSP workspace folders if available
   local clients = get_lsp_clients()
